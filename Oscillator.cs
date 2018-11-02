@@ -4,43 +4,40 @@ using UnityEngine;
 
 namespace Oscillator
 {
-    public class Oscillator
+    public class Oscillator : MonoBehaviour
     {
-        public float frequency { get; set; }
-        public float amplitude { get; set; }
-        public float offset { get; set; }
-        public float sampleRate { get; set; }
-        private ulong time = 0; //Will jump once this wraps around. Thankfully, this will not happen often, but it could be an issue for a continuously playing tone.
-        private Oscillator modulator = null;
+        private float frequency; //Set as needed by PMSynth component 
+        public float ratio;
+        public float amplitude;
+        public float offset;
+        public float feedback;
 
-        public Oscillator(float frequency, float amplitude, float offset, double sampleRate)
+        private float data = 0;
+        private float sampleRate;
+        private ulong time = 0; //Will cause a click once this wraps around. Thankfully, this will not happen often, but it could be an issue for a continuously playing tone.
+        public Oscillator[] modulators = new Oscillator[0];
+        
+        public void setSampleRate(float sampleRate)
         {
-            this.frequency = frequency;
-            this.amplitude = amplitude;
-            this.offset = offset;
-            this.sampleRate = (float) sampleRate;
+            this.sampleRate = sampleRate;
+            for (int i = 0; i < modulators.Length; i++)
+                modulators[i].sampleRate = sampleRate;
         }
 
-        public Oscillator(float frequency, float amplitude, float offset, double sampleRate, Oscillator modulator)
+        public void setFrequency(float frequency)
         {
             this.frequency = frequency;
-            this.amplitude = amplitude;
-            this.offset = offset;
-            this.sampleRate = (float)sampleRate;
-            this.modulator = modulator;
+            for (int i = 0; i < modulators.Length; i++)
+                if (modulators[i] != null)
+                    modulators[i].setFrequency(frequency);
         }
 
         public float generateData()
         {
-            float data;
-            if (modulator == null)
-            {
-                data = amplitude * Mathf.Sin((2 * Mathf.PI * frequency * time) / sampleRate);
-            }
-            else
-            {
-                data = amplitude * Mathf.Sin((2 * Mathf.PI * frequency * time) / sampleRate + 1f * modulator.generateData());
-            }
+            float phaseModulation = 0;
+            for (int i = 0; i < modulators.Length; i++)
+                phaseModulation += modulators[i].generateData();
+            data = amplitude * Mathf.Sin((2 * Mathf.PI * ratio * frequency * time) / sampleRate + 1f * phaseModulation + feedback*data + offset); //Note that the feedback has a delay on it.
             time++;
             return data;
         }
