@@ -1,6 +1,7 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using System;
 
 namespace Oscillator
 {
@@ -11,6 +12,7 @@ namespace Oscillator
         public float amplitude;
         public float offset;
         public float feedback;
+        
 
         private float data = 0;
         private float sampleRate;
@@ -36,7 +38,8 @@ namespace Oscillator
         {
             float phaseModulation = 0;
             for (int i = 0; i < modulators.Length; i++)
-                phaseModulation += modulators[i].generateData();
+                if (modulators[i] != null)
+                    phaseModulation += modulators[i].generateData();
             data = amplitude * Mathf.Sin((2 * Mathf.PI * ratio * frequency * time) / sampleRate + 1f * phaseModulation + feedback*data + offset); //Note that the feedback has a delay on it.
             time++;
             return data;
