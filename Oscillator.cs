@@ -7,9 +7,9 @@ public class Oscillator : MonoBehaviour
 {
     //Oscillator Properties
     private float[] frequency; //Set as needed by PMSynth component.
-    private byte[] velocity; //Set as needed by PMSynth component.
+    private float[] velocity; //Set as needed by PMSynth component.
     private bool[] voiceOn;
-    private byte voices;
+    private int voices;
 
     private bool[] playing;
 
@@ -26,10 +26,10 @@ public class Oscillator : MonoBehaviour
     public float[] modulationIndicies = new float[0]; //Optional. Acts as multiplier to the data of the corresponding modulator. Will default to 1.
 
     //Envelope
-    public float attack;
-    public float decay;
-    public float sustain;
-    public float release;
+    public float attack = 0;
+    public float decay = 0;
+    public float sustain = 1;
+    public float release = 0;
     
     private bool[] onRelease;
     private float[] offTime; //Used in calculating data during release
@@ -46,13 +46,13 @@ public class Oscillator : MonoBehaviour
                 modulators[i].sampleRate = sampleRate;
     }
 
-    public void SetVoices(byte voices)
+    public void SetVoices(int voices)
     {
         if (recursion)
             return;
         recursion = true;
         frequency = new float[voices];
-        velocity = new byte[voices];
+        velocity = new float[voices];
         voiceOn = new bool[voices];
         onRelease = new bool[voices];
         playing = new bool[voices];
@@ -67,7 +67,7 @@ public class Oscillator : MonoBehaviour
     }
 
 
-    public float GenerateData(byte voice)
+    public float GenerateData(int voice)
     {
         if (playing[voice] == false)
             return float.NegativeInfinity; //This will set the synth to set the voice as inactive
@@ -81,14 +81,13 @@ public class Oscillator : MonoBehaviour
                     phaseModulation += modulationIndicies[i] * modulators[i].GenerateData(voice);
                 else
                     phaseModulation += modulators[i].GenerateData(voice);
-        data = GenerateEnvelopeScalar(voice) * amplitude * Mathf.Sin((float) (4 * Mathf.PI * ratio * frequency[voice] * time[voice]) / sampleRate + 1f * phaseModulation + feedback*data + offset); //Note that the feedback has a delay on it.
-        //data = GenerateEnvelopeScalar(voice) * amplitude * Mathf.Sin((float)(4 * Mathf.PI * ratio * frequency[voice] * time[voice] * AudioSettings.dspTime) / sampleRate + 1f * phaseModulation + feedback * data + offset); //Fun sounding version, for testing purposes only.
+        data = GenerateEnvelopeScalar(voice) * velocity[voice] * amplitude * Mathf.Sin((float) (4 * Mathf.PI * ratio * frequency[voice] * time[voice]) / sampleRate + 1f * phaseModulation + feedback*data + offset); //Note that the feedback has a delay on it.
         time[voice]++;
         recursion = false;
         return data;
     }
 
-    public float GenerateEnvelopeScalar(byte voice)
+    public float GenerateEnvelopeScalar(int voice)
     {
         float seconds = time[voice] / sampleRate;
         if (onRelease[voice] == false)
@@ -98,6 +97,8 @@ public class Oscillator : MonoBehaviour
                 return seconds / attack;
             if ((seconds - attack) - decay < 0)
                 return 1 - (1- sustain) * (seconds - attack) / decay;
+            if (sustain == 0)
+                playing[voice] = false;
             return sustain;
         }
         if (seconds - offTime[voice] < release)
@@ -108,24 +109,23 @@ public class Oscillator : MonoBehaviour
 
     public int NoteOn(float frequency, byte velocity)
     {
-        recursion = true;
-        for (byte i = 0; i < voices; i++)
+        for (int i = 0; i < voices; i++)
             if (voiceOn[i] == false)
             {
                 voiceOn[i] = true;
                 this.frequency[i] = frequency;
+                this.velocity[i] = velocity / 127;
                 time[i] = 0;
                 playing[i] = true;
                 for (int j = 0; j < modulators.Length; j++)
                     if (modulators[j] != null)
-                        modulators[j].NoteOn(frequency, velocity, i);
-                recursion = false;
+                        modulators[j].NoteOn(frequency, 1, i);
                 return (int)i;
             }
         return 256; //as this is larger than the highest possible voice, it is used as a failure to find a new voice
     }
 
-    public void NoteOn(float frequency, byte velocity, byte voice)
+    public void NoteOn(float frequency, float velocity, int voice)
     {
         if (recursion)
             return; 
@@ -133,13 +133,14 @@ public class Oscillator : MonoBehaviour
         playing[voice] = true;
         time[voice] = 0;
         this.frequency[voice] = frequency;
+        this.velocity[voice] = velocity;
         for (int i = 0; i < modulators.Length; i++)
             if (modulators[i] != null)
                 modulators[i].NoteOn(frequency, velocity, voice);
         recursion = false;
     }
 
-    public void NoteOff(byte voice)
+    public void NoteOff(int voice)
     {
         offTime[voice] = time[voice] / sampleRate;
         offEnvelopeScalar[voice] = GenerateEnvelopeScalar(voice);

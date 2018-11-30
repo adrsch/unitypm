@@ -4,91 +4,77 @@ using UnityEngine;
 
 public class PMSynth : MonoBehaviour 
 {
-    public float frequency;
     public float amplitude;
     public byte voices;
     private float sampleRate;
-    public Oscillator[] outputOscillators = new Oscillator[0];
-    private bool[] activeVoices;
+    public Oscillator[] Oscillators = new Oscillator[0];
+    private bool[] voiceOn;
+    private bool on;
 
     void Start()
     {
-        activeVoices = new bool[voices];
+        voiceOn = new bool[voices];
         sampleRate = AudioSettings.outputSampleRate;
-        for (int i = 0; i < outputOscillators.Length; i++)
+        for (int i = 0; i < Oscillators.Length; i++)
         {
-            outputOscillators[i].SetSampleRate(sampleRate);
-            outputOscillators[i].SetVoices(voices);
+            Oscillators[i].SetSampleRate(sampleRate);
+            Oscillators[i].SetVoices(voices);
         }
-
-        Application.targetFrameRate = 10;
+        on = true;
     }
 
-    void NoteOn(float frequency, byte velocity)
+    public bool IsOn()
     {
-
+        return on;
     }
 
-    void NoteOn(float frequency)
+    //Returns voice used, or null if there isn't one available or if it hasn't been initialized yet. Uses midi velocity, ranging from 0 to 127. 
+    public int? NoteOn(float frequency, byte velocity)
     {
-
+        if (!on)
+            return null;
+        int? i;
+        for (i = 0; i < voices; i++)
+            if (voiceOn[(int)i] == false)
+                for (int j = 0; j < Oscillators.Length; j++)
+                {
+                    Oscillators[j].NoteOn(frequency, velocity / 127, (int)i);
+                    voiceOn[(int)i] = true;
+                }
+        return i;
     }
+    
 
-    void NoteOn(byte pitch, byte velocity)
+   public void NoteOff(int voice)
     {
-
+        for (int i = 0; i < Oscillators.Length; i++)
+            Oscillators[i].NoteOff(voice);
     }
-
-    void NoteOff()
-    {
-
-    }
-
-    private int t = 0;
+    
     void OnAudioFilterRead(float[] data, int channels)
     {
-         if (t > 100000000)
-            t = 0;
-
-        for (int n = 0; n < data.Length / channels; n++)
-        {
-            //Sum up the outputs from all oscillators.
-            float oscOutputs = 0;
-            for (int j = 0; j < outputOscillators.Length; j++)
+        if (on)
+            for (int n = 0; n < data.Length / channels; n++)
             {
-                if (t == 0)
-                {
-                    int voiceUsed = outputOscillators[j].NoteOn(frequency, 255);
-                    if (voiceUsed != 256)
-                    {
-                        activeVoices[voiceUsed] = true;
-                    }
-                }
-                if (t == 100000)
-                {
-                    for (byte i = 0; i < voices; i++)
-                        if (activeVoices[i] == true)
-                            outputOscillators[i].NoteOff(i);
+                //Sum up the outputs from all oscillators.
+                float oscOutputs = 0;
+                for (int j = 0; j < Oscillators.Length; j++)
+                    for (int i = 0; i < voices; i++)
+                        if (voiceOn[i] == true)
+                        {
+                            float oscData = Oscillators[j].GenerateData(i);
+                            if (float.IsNegativeInfinity(oscData))
+                                voiceOn[i] = false;
+                            else
+                                oscOutputs += oscData;
+                        }
+                //Currently, no stereo support.
+                for (int i = 0; i < channels; i++)
+                    data[n * channels + i] = amplitude * oscOutputs;
 
-                }
-                for (byte i = 0; i < voices; i++)
-                    if (activeVoices[i] == true)
-                    {
-                        float oscData = outputOscillators[j].GenerateData(i);
-                        if (float.IsNegativeInfinity(oscData))
-                            activeVoices[i] = false;
-                        else
-                            oscOutputs += oscData;
-                    }
+                n++;
+
+            
             }
-            //Currently, no stereo support.
-            for (int i = 0; i < channels; i++)
-                data[n * channels + i] = amplitude * oscOutputs;
-
-            n++;
-
-
-            t++;
-        }
     }
 }
