@@ -27,7 +27,13 @@ public class MidiController : MonoBehaviour
     {
         if (first && pMSynth.IsOn())
         {
-            NoteOn(440f, 127, 0);
+            NoteOn(98.00f, 127, 0);
+            NoteOn(220.00f, 127, 0);
+            NoteOn(261.63f, 127, 0);
+            NoteOn(329.63f, 127, 0);
+            NoteOn(392.00f, 127, 0);
+            NoteOn(493.88f, 127, 0);
+            NoteOn(587.33f, 127, 0);
             first = false;
 
         }

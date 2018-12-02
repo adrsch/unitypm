@@ -18,10 +18,11 @@ public class Oscillator : MonoBehaviour
     public float offset = 0; //Shifts the phase of the waves.
     public float feedback = 0; //Range is 0 to 1. Uses the previous calculation's data as if it were a standard modulator. This number functions as the modulation index would.
 
-    //Modulators
-    private float data = 0;
+    private float[] data;
     private float sampleRate;
     private ulong[] time; //Will cause a click once this wraps around. Thankfully, this will not happen often, but it could be an issue for a continuously playing tone.
+
+    //Modulators
     public Oscillator[] modulators = new Oscillator[0]; //Please don't start an infinite loop of modulators. This will cause a stack overflow.
     public float[] modulationIndicies = new float[0]; //Optional. Acts as multiplier to the data of the corresponding modulator. Will default to 1.
 
@@ -30,7 +31,16 @@ public class Oscillator : MonoBehaviour
     public float decay = 0;
     public float sustain = 1;
     public float release = 0;
-    
+
+    public LFO[] ratioLFO = new LFO[0];
+    public float[] ratioLFOModulation = new float[0];
+    public LFO[] amplitudeLFO = new LFO[0];
+    public float[] amplitudeLFOModulation = new float[0];
+    public LFO[] feedbackLFO = new LFO[0];
+    public float[] feedbackLFOModulation = new float[0];
+    public LFO[] indiciesLFO = new LFO[0];
+    public float[] indiciesLFOModulation = new float[0];
+
     private bool[] onRelease;
     private float[] offTime; //Used in calculating data during release
     private float[] offEnvelopeScalar; //Used in calculating data during release
@@ -44,6 +54,18 @@ public class Oscillator : MonoBehaviour
         for (int i = 0; i < modulators.Length; i++)
             if (modulators[i] != null)
                 modulators[i].sampleRate = sampleRate;
+        for (int i = 0; i < ratioLFO.Length; i++)
+            if (ratioLFO[i] != null)
+                ratioLFO[i].SetSampleRate(sampleRate);
+        for (int i = 0; i < amplitudeLFO.Length; i++)
+            if (amplitudeLFO != null)
+                amplitudeLFO[i].SetSampleRate(sampleRate);
+        for (int i = 0; i < feedbackLFO.Length; i++)
+            if (feedbackLFO != null)
+                feedbackLFO[i].SetSampleRate(sampleRate);
+        for (int i = 0; i < indiciesLFO.Length; i++)
+            if (indiciesLFO[i] != null)
+                indiciesLFO[i].SetSampleRate(sampleRate);
     }
 
     public void SetVoices(int voices)
@@ -59,6 +81,7 @@ public class Oscillator : MonoBehaviour
         time = new ulong[voices];
         offTime = new float[voices];
         offEnvelopeScalar = new float[voices];
+        data = new float[voices];
         this.voices = voices;
         for (int i = 0; i < modulators.Length; i++)
             if (modulators[i] != null)
@@ -72,19 +95,51 @@ public class Oscillator : MonoBehaviour
         if (playing[voice] == false)
             return float.NegativeInfinity; //This will set the synth to set the voice as inactive
         if (recursion)
-            return data; //Feeding an oscillator's modulator the oscillator itself will result in a delay as is the case with feedback. 
+            return data[voice]; //Feeding an oscillator's modulator the oscillator itself will result in a delay as is the case with feedback. 
         recursion = true;
+        
+        //LFOs (except modulation indicies LFO - that is done in phase modulation)
+        float modulatedRatio = ratio;
+        for (int i = 0; i < ratioLFO.Length; i++)
+            if (ratioLFO[i] != null)
+                if (i < ratioLFOModulation.Length)
+                    modulatedRatio = ratioLFOModulation[i] * (ratioLFO[i].generateData(time[voice]) - modulatedRatio) + modulatedRatio;
+                else
+                    modulatedRatio *= ratioLFO[i].generateData(time[voice]);
+        float modulatedAmplitude = amplitude;
+        for (int i = 0; i < amplitudeLFO.Length; i++)
+            if (amplitudeLFO[i] != null)
+                if (i < amplitudeLFOModulation.Length)
+                    modulatedAmplitude = amplitudeLFOModulation[i] * (amplitudeLFO[i].generateData(time[voice]) - modulatedAmplitude) + modulatedAmplitude;
+                else
+                    modulatedAmplitude *= amplitudeLFO[i].generateData(time[voice]);
+        float modulatedFeedback = feedback;
+        for (int i = 0; i < feedbackLFO.Length; i++)
+            if (feedbackLFO[i] != null)
+                if (i < feedbackLFOModulation.Length)
+                    modulatedFeedback = feedbackLFOModulation[i] * (feedbackLFO[i].generateData(time[voice]) - modulatedFeedback) + modulatedFeedback;
+                else
+                    modulatedFeedback *= feedbackLFO[i].generateData(time[voice]);
+
+        //Phase Modulation
         float phaseModulation = 0;
         for (int i = 0; i < modulators.Length; i++)
             if (modulators[i] != null)
                 if (i < modulationIndicies.Length)
-                    phaseModulation += modulationIndicies[i] * modulators[i].GenerateData(voice);
+                    if (i < indiciesLFO.Length && indiciesLFO[i] != null)
+                        if (i < indiciesLFOModulation.Length)
+                            phaseModulation = indiciesLFOModulation[i] * (indiciesLFO[i].generateData(time[voice]) * modulationIndicies[i] * modulators[i].GenerateData(voice) - phaseModulation) + phaseModulation;
+                        else
+                            phaseModulation += indiciesLFO[i].generateData(time[voice]) * modulationIndicies[i] * modulators[i].GenerateData(voice);
+                    else
+                        phaseModulation += modulationIndicies[i] * modulators[i].GenerateData(voice);
                 else
                     phaseModulation += modulators[i].GenerateData(voice);
-        data = GenerateEnvelopeScalar(voice) * velocity[voice] * amplitude * Mathf.Sin((float) (4 * Mathf.PI * ratio * frequency[voice] * time[voice]) / sampleRate + 1f * phaseModulation + feedback*data + offset); //Note that the feedback has a delay on it.
+
+        data[voice] = GenerateEnvelopeScalar(voice) * velocity[voice] * modulatedAmplitude * Mathf.Sin((float) (4 * Mathf.PI * modulatedRatio * frequency[voice] * time[voice]) / sampleRate + 1f * phaseModulation + modulatedFeedback * data[voice]); //Note that the feedback has a delay on it.
         time[voice]++;
         recursion = false;
-        return data;
+        return data[voice];
     }
 
     public float GenerateEnvelopeScalar(int voice)
