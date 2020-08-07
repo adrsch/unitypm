@@ -10,11 +10,11 @@ public class MidiController : MonoBehaviour
 
     void NoteOn(byte pitch, byte velocity)
     {
-
+        
     }
 
 
-    void NoteOn(float pitch, byte velocity, int midiVoice)
+    void NoteOn(float pitch, float velocity, int midiVoice)
     {
         int? voice = pMSynth.NoteOn(pitch, velocity);
         if (voice == null)
@@ -25,8 +25,10 @@ public class MidiController : MonoBehaviour
 
     void OnAudioFilterRead(float[] data, int channels)
     {
-        if (first && pMSynth.IsOn())
+        if (first)
         {
+            NoteOn(440f, 1, 0);
+            /*
             NoteOn(98.00f, 127, 0);
             NoteOn(220.00f, 127, 0);
             NoteOn(261.63f, 127, 0);
@@ -34,6 +36,7 @@ public class MidiController : MonoBehaviour
             NoteOn(392.00f, 127, 0);
             NoteOn(493.88f, 127, 0);
             NoteOn(587.33f, 127, 0);
+            */
             first = false;
 
         }

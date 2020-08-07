@@ -14,6 +14,6 @@ public class LFO : MonoBehaviour
 
     public float generateData(ulong time)
     {
-        return Mathf.Sin((float)(4 * Mathf.PI * frequency * time) / sampleRate);
+        return Mathf.Cos((float)(4 * Mathf.PI * frequency * time) / sampleRate);
     }
 }
