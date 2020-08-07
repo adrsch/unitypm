@@ -16,7 +16,6 @@ public class Oscillator : MonoBehaviour
     public float ratio = 1;
     public float amplitude = 1; // Range is 0 to 1. Use 0 to -1 for inversion. Values beyond 1 will clip.
     public float offset = 0; // Shifts the phase of the waves.
-    public float feedback = 0; // Range is 0 to 1. Uses the previous calculation's data as if it were a standard modulator. This number functions as the modulation index would.
 
     private float[] data;
     private float sampleRate;
@@ -24,7 +23,7 @@ public class Oscillator : MonoBehaviour
 
     // Modulators
     public Oscillator[] modulators = new Oscillator[0];
-    public float[] modulationIndicies = new float[0]; // Optional. Acts as multiplier to the data of the corresponding modulator. Will default to 1.
+    public float[] modulationIndicies = new float[0]; // Optional. Acts as multiplier to the data of the corresponding modulator. Will default to 0, which is no modulation.
 
     // Envelope
     public float attack = 0;
@@ -36,8 +35,6 @@ public class Oscillator : MonoBehaviour
     public float[] ratioLFOModulation = new float[0];
     public LFO[] amplitudeLFO = new LFO[0];
     public float[] amplitudeLFOModulation = new float[0];
-    public LFO[] feedbackLFO = new LFO[0];
-    public float[] feedbackLFOModulation = new float[0];
     public LFO[] indiciesLFO = new LFO[0];
     public float[] indiciesLFOModulation = new float[0];
 
@@ -45,7 +42,7 @@ public class Oscillator : MonoBehaviour
     private float[] offTime; // Used in calculating data during release
     private float[] offEnvelopeScalar; // Used in calculating data during release
 
-    // Used for when osc a is modulated by osc b which is modulated by a. 
+    // Used to allow for feedback - previous datapoint will be used to calculate self modulation 
     private bool feedbackLoopCheck = false;
     
     private void setSampleRate(LFO[] lfos)
@@ -72,7 +69,6 @@ public class Oscillator : MonoBehaviour
         setSampleRate(modulators);
         setSampleRate(ratioLFO);
         setSampleRate(amplitudeLFO);
-        setSampleRate(feedbackLFO);
         setSampleRate(indiciesLFO);
     }
 
@@ -134,7 +130,6 @@ public class Oscillator : MonoBehaviour
                 : 0f;
 
             float modulatedIndex = lfoModulation(indiciesLFO, indiciesLFOModulation, index, voice);
-            //float modulatedIndex = index;
 
             float modulatorData = new Func<float?, float>((float? data) =>
                 (data != null)
@@ -161,27 +156,19 @@ public class Oscillator : MonoBehaviour
         if (feedbackLoopCheck) { return data[voice]; }
         feedbackLoopCheck = true;
         
-        //LFOs (except modulation indicies LFO - that is done in phase modulation)
         float modulatedRatio = lfoModulation(ratioLFO, ratioLFOModulation, ratio, voice);
         float modulatedAmplitude = lfoModulation(amplitudeLFO, amplitudeLFOModulation, amplitude, voice);
-        float modulatedFeedback = lfoModulation(feedbackLFO, feedbackLFOModulation, feedback, voice);
 
-        //Phase Modulation
         float phaseModulation = this.phaseModulation(voice);
 
+        // TODO: Replace with wavetable - faster & more flexible.
         data[voice] = 
             GenerateEnvelopeScalar(voice) *
             velocity[voice] *
             modulatedAmplitude *
             Mathf.Cos((float)
-                4 *
-                Mathf.PI *
-                modulatedRatio *
-                (frequency[voice] +
-                 //phaseModulation + modulatedFeedback * data[voice]) *
-                 0)*
-                time[voice] / sampleRate
-                + (phaseModulation + modulatedFeedback) * 4 * Mathf.PI / sampleRate
+                (4 * Mathf.PI / sampleRate) *
+                (modulatedRatio * frequency[voice] * time[voice] + phaseModulation)
             );
         time[voice]++;
         feedbackLoopCheck = false;
@@ -191,19 +178,33 @@ public class Oscillator : MonoBehaviour
     public float GenerateEnvelopeScalar(int voice)
     {
         float seconds = time[voice] / sampleRate;
+        // NoteOff hasn't been sent, will either be in attack, decay, or sustain.
         if (onRelease[voice] == false)
         {
             seconds = time[voice] / sampleRate;
+            // Attack
             if ( seconds - attack < 0)
+            {
                 return seconds / attack;
+            }
+            // Decay
             if ((seconds - attack) - decay < 0)
+            {
                 return 1 - (1- sustain) * (seconds - attack) / decay;
+            }
+            // Sustain
             if (sustain == 0)
+            {
                 playing[voice] = false;
+            }
             return sustain;
         }
+        // Release
         if (seconds - offTime[voice] < release)
+        {
             return offEnvelopeScalar[voice] * (1 -  (seconds - offTime[voice]) / release);
+        }
+        // After release
         playing[voice] = false;
         return 0;
     }
@@ -217,9 +218,11 @@ public class Oscillator : MonoBehaviour
         time[voice] = 0;
         this.frequency[voice] = frequency;
         this.velocity[voice] = velocity;
-        for (int i = 0; i < modulators.Length; i++)
-            if (modulators[i] != null)
-                modulators[i].NoteOn(frequency, velocity, voice);
+        foreach (Oscillator osc in modulators)
+        {
+            if (osc == null) { continue; }
+            osc.NoteOn(frequency, velocity, voice);
+        }
 
         feedbackLoopCheck = false;
     }
