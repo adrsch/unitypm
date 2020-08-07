@@ -64,7 +64,6 @@ public class Oscillator : MonoBehaviour
             if (osc == null) { continue; }
             osc.SetSampleRate(sampleRate);
         }
-        Debug.Log(sampleRate);
     }
 
     public void SetSampleRate(float sampleRate)
@@ -182,8 +181,7 @@ public class Oscillator : MonoBehaviour
                  //phaseModulation + modulatedFeedback * data[voice]) *
                  0)*
                 time[voice] / sampleRate
-                + phaseModulation * 4 * Mathf.PI / sampleRate
-                //modulatedFeedback * data[voice]
+                + (phaseModulation + modulatedFeedback) * 4 * Mathf.PI / sampleRate
             );
         time[voice]++;
         feedbackLoopCheck = false;
